@@ -149,7 +149,7 @@ async def on_message(message):
                 )
 
                 response = ai_client.models.generate_content(
-                    model="gemini-1.5-flash", contents=historial, config=config
+                    model="gemini-2.5-flash-lite", contents=historial, config=config
                 )
 
                 if response.text:
