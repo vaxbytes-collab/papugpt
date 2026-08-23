@@ -17,21 +17,20 @@ app = Flask("")
 
 @app.route("/")
 def home():
-  return "papugpt anda activo 24/7 papu :v"
+    return "papugpt anda activo 24/7 papu :v"
 
 
 def run_flask():
-  port = int(os.environ.get("PORT", 8080))
-  app.run(host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
 
 
 def keep_alive():
-  t = Thread(target=run_flask)
-  t.start()
+    t = Thread(target=run_flask)
+    t.start()
 
 
 # --- 2. CONFIGURACIÓN DE DISCORD Y GEMINI ---
-# LEEMOS DESDE EL .ENV SEGURO PAPU :v
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN")
 GEMINI_KEY = os.environ.get("GEMINI_KEY")
 
@@ -54,116 +53,116 @@ bot_discord = discord.Client(intents=intents)
 
 @bot_discord.event
 async def on_ready():
-  print(f"papugpt ({bot_discord.user}) ya anda en el server :v")
+    print(f"papugpt ({bot_discord.user}) ya anda en el server :v")
 
 
 @bot_discord.event
 async def on_message(message):
-  # RESPONDE A OTROS BOTS BUT NO A SÍ MISMO :v
-  if message.author.id == bot_discord.user.id:
-    return
+    # RESPONDE A OTROS BOTS BUT NO A SÍ MISMO :v
+    if message.author.id == bot_discord.user.id:
+        return
 
-  mencionado = bot_discord.user.mentioned_in(message)
-  es_respuesta_a_bot = False
-  if message.reference and message.reference.resolved:
-    msg_referenciado = message.reference.resolved
-    if msg_referenciado.author.id == bot_discord.user.id:
-      es_respuesta_a_bot = True
+    mencionado = bot_discord.user.mentioned_in(message)
+    es_respuesta_a_bot = False
+    if message.reference and message.reference.resolved:
+        msg_referenciado = message.reference.resolved
+        if msg_referenciado.author.id == bot_discord.user.id:
+            es_respuesta_a_bot = True
 
-  if mencionado or es_respuesta_a_bot:
-    async with message.channel.typing():
-      try:
-        texto_usuario = (
-            message.content.replace(f"<@{bot_discord.user.id}>", "").strip()
-        )
-        texto_lower = texto_usuario.lower()
-
-        # DETECTOR DE IMÁGENES PAPU :v
-        palabras_clave = [
-            "dibuja",
-            "dibujame",
-            "genera una imagen",
-            "crea una imagen",
-            "haz una imagen",
-            "haz un dibujo",
-            "imagen de",
-        ]
-        quiere_imagen = any(p in texto_lower for p in palabras_clave)
-
-        if quiere_imagen:
-          await message.reply("dale papu, ahorita te la hago")
-
-          try:
-            prompt_encoded = urllib.parse.quote(texto_usuario)
-            url_imagen = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true"
-
-            headers = {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-                    " AppleWebKit/537.36 (KHTML, like Gecko)"
-                    " Chrome/120.0.0.0 Safari/537.36"
+    if mencionado or es_respuesta_a_bot:
+        async with message.channel.typing():
+            try:
+                texto_usuario = (
+                    message.content.replace(f"<@{bot_discord.user.id}>", "").strip()
                 )
-            }
-            req = urllib.request.Request(url_imagen, headers=headers)
+                texto_lower = texto_usuario.lower()
 
-            with urllib.request.urlopen(req, timeout=15) as response:
-              image_bytes = response.read()
+                # DETECTOR DE IMÁGENES PAPU :v
+                palabras_clave = [
+                    "dibuja",
+                    "dibujame",
+                    "genera una imagen",
+                    "crea una imagen",
+                    "haz una imagen",
+                    "haz un dibujo",
+                    "imagen de",
+                ]
+                quiere_imagen = any(p in texto_lower for p in palabras_clave)
 
-            with open("temp_papu.jpg", "wb") as f:
-              f.write(image_bytes)
+                if quiere_imagen:
+                    await message.reply("dale papu, ahorita te la hago")
 
-            file = discord.File("temp_papu.jpg", filename="papubot_imagen.jpg")
-            await message.reply(
-                content="aqui tienes tu dibujo papu :v", file=file
-            )
+                    try:
+                        prompt_encoded = urllib.parse.quote(texto_usuario)
+                        url_imagen = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=1024&height=1024&nologo=true"
 
-            if os.path.exists("temp_papu.jpg"):
-              os.remove("temp_papu.jpg")
-            return
+                        headers = {
+                            "User-Agent": (
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                                " AppleWebKit/537.36 (KHTML, like Gecko)"
+                                " Chrome/120.0.0.0 Safari/537.36"
+                            )
+                        }
+                        req = urllib.request.Request(url_imagen, headers=headers)
 
-          except Exception as img_err:
-            print(f"Error generando imagen: {img_err}")
-            await message.reply(
-                "chale papu :'v no pude hacer el dibujo, intentalo mas alrato"
-            )
-            return
+                        with urllib.request.urlopen(req, timeout=15) as response:
+                            image_bytes = response.read()
 
-        # SI NO PIDIÓ IMAGEN, RESPONDE TEXTO NORMAL CON GEMINI
-        historial = []
-        async for msg in message.channel.history(limit=6):
-          if msg.content:
-            autor = "model" if msg.author == bot_discord.user else "user"
-            txt_limpio = msg.content.replace(
-                f"<@{bot_discord.user.id}>", ""
-            ).strip()
-            if txt_limpio:
-              contenido = types.Content(
-                  role=autor, parts=[types.Part.from_text(text=txt_limpio)]
-              )
-              historial.append(contenido)
+                        with open("temp_papu.jpg", "wb") as f:
+                            f.write(image_bytes)
 
-        historial.reverse()
+                        file = discord.File("temp_papu.jpg", filename="papubot_imagen.jpg")
+                        await message.reply(
+                            content="aqui tienes tu dibujo papu :v", file=file
+                        )
 
-        config = types.GenerateContentConfig(
-            system_instruction=PERSONALIDAD_PAPUGPT,
-            temperature=1.0,
-        )
+                        if os.path.exists("temp_papu.jpg"):
+                            os.remove("temp_papu.jpg")
+                        return
 
-        response = ai_client.models.generate_content(
-            model="gemini-3.6-flash", contents=historial, config=config
-        )
+                    except Exception as img_err:
+                        print(f"Error generando imagen: {img_err}")
+                        await message.reply(
+                            "chale papu :'v no pude hacer el dibujo, intentalo mas alrato"
+                        )
+                        return
 
-        if response.text:
-          await message.reply(response.text)
-        else:
-          await message.reply("miau miau que dijiste papu :v")
+                # SI NO PIDIÓ IMAGEN, RESPONDE TEXTO NORMAL CON GEMINI
+                historial = []
+                async for msg in message.channel.history(limit=6):
+                    if msg.content:
+                        autor = "model" if msg.author == bot_discord.user else "user"
+                        txt_limpio = msg.content.replace(
+                            f"<@{bot_discord.user.id}>", ""
+                        ).strip()
+                        if txt_limpio:
+                            contenido = types.Content(
+                                role=autor, parts=[types.Part.from_text(text=txt_limpio)]
+                            )
+                            historial.append(contenido)
 
-      except Exception as e:
-        print(f"ERROR: {e}")
-        await message.reply(f"chale me tienes de payaso :'v error: {e}")
+                historial.reverse()
+
+                config = types.GenerateContentConfig(
+                    system_instruction=PERSONALIDAD_PAPUGPT,
+                    temperature=1.0,
+                )
+
+                response = ai_client.models.generate_content(
+                    model="gemini-1.5-flash", contents=historial, config=config
+                )
+
+                if response.text:
+                    await message.reply(response.text)
+                else:
+                    await message.reply("miau miau que dijiste papu :v")
+
+            except Exception as e:
+                print(f"ERROR: {e}")
+                await message.reply(f"chale me tienes de payaso :'v error: {e}")
 
 
 # --- 3. ARRANCAR TODO ---
 if __name__ == "__main__":
-  keep_alive()
-  bot_discord.run(DISCORD_TOKEN)
+    keep_alive()
+    bot_discord.run(DISCORD_TOKEN)
