@@ -1,7 +1,7 @@
 import os
-from threading import Thread
 import urllib.parse
 import urllib.request
+from threading import Thread
 import discord
 from dotenv import load_dotenv
 from flask import Flask
@@ -36,24 +36,26 @@ GEMINI_KEY = os.environ.get("GEMINI_KEY")
 
 ai_client = genai.Client(api_key=GEMINI_KEY)
 
+# LA PERSONALIDAD EXACTA QUE PASASTE PAPU :V
 PERSONALIDAD_PAPUGPT = (
     "eres papugpt, un bot gracioso, cursi, humilde y desenfadado de discord."
-    "hablas como morro shitposter de la grasa."
-    "REGLAS DE ESTILO:"
-    "1. escribe todo en minusculas."
-    "2. usa frases como 'papu :v', 'jajajaja xd mamu me tienes de payaso :c',"
-    "'miau miau otra vez? :3', 'when', 'but'."
-    "3. tus respuestas deben ser breves, de 1 a 3 lineas."
+    " hablas como morro shitposter de la grasa."
+    " REGLAS DE ESTILO:"
+    " 1. escribe todo en minusculas."
+    " 2. usa frases como 'papu :v', 'jajajaja xd mamu me tienes de payaso :c',"
+    " 'miau miau otra vez? :3', 'when', 'but'."
+    " 3. tus respuestas deben ser breves, de 1 a 3 lineas."
 )
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.dm_messages = True
 bot_discord = discord.Client(intents=intents)
 
 
 @bot_discord.event
 async def on_ready():
-    print(f"papugpt ({bot_discord.user}) ya anda en el server :v")
+    print(f"papugpt ({bot_discord.user}) ya anda en el server y en MD :v")
 
 
 @bot_discord.event
@@ -62,6 +64,45 @@ async def on_message(message):
     if message.author.id == bot_discord.user.id:
         return
 
+    # --- 3. MODO MENSAJES PRIVADOS (MD / DM) DE CHILL ---
+    if isinstance(message.channel, discord.DMChannel):
+        async with message.channel.typing():
+            try:
+                texto_usuario = message.content.strip()
+
+                historial = []
+                async for msg in message.channel.history(limit=6):
+                    if msg.content:
+                        autor = "model" if msg.author == bot_discord.user else "user"
+                        historial.append(
+                            types.Content(
+                                role=autor,
+                                parts=[types.Part.from_text(text=msg.content.strip())],
+                            )
+                        )
+
+                historial.reverse()
+
+                config = types.GenerateContentConfig(
+                    system_instruction=PERSONALIDAD_PAPUGPT,
+                    temperature=0.8,
+                )
+
+                response = ai_client.models.generate_content(
+                    model="gemini-3.5-flash-lite", contents=historial, config=config
+                )
+
+                if response.text:
+                    await message.channel.send(response.text)
+                else:
+                    await message.channel.send("miau miau que dijiste papu :v")
+
+            except Exception as e:
+                print(f"ERROR EN MD: {e}")
+                await message.channel.send("chale me tienes de payaso :'v error en md")
+        return
+
+    # --- 4. MODO CANALES DEL SERVIDOR ---
     mencionado = bot_discord.user.mentioned_in(message)
     es_respuesta_a_bot = False
     if message.reference and message.reference.resolved:
@@ -145,7 +186,7 @@ async def on_message(message):
 
                 config = types.GenerateContentConfig(
                     system_instruction=PERSONALIDAD_PAPUGPT,
-                    temperature=1.0,
+                    temperature=0.8,
                 )
 
                 response = ai_client.models.generate_content(
@@ -162,7 +203,7 @@ async def on_message(message):
                 await message.reply(f"chale me tienes de payaso :'v error: {e}")
 
 
-# --- 3. ARRANCAR TODO ---
+# --- 5. ARRANCAR TODO ---
 if __name__ == "__main__":
     keep_alive()
     bot_discord.run(DISCORD_TOKEN)
