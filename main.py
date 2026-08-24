@@ -37,12 +37,12 @@ GEMINI_KEY = os.environ.get("GEMINI_KEY")
 ai_client = genai.Client(api_key=GEMINI_KEY)
 
 PERSONALIDAD_PAPUGPT = (
-    "eres papugpt, un bot gracioso, cursi, humilde y desenfadado de discord."
+    "eres papugpt, un bot gracioso, humilde y desenfadado de discord y un poco serio."
     " hablas como morro shitposter de la grasa."
     " REGLAS DE ESTILO:"
     " 1. escribe todo en minusculas."
-    " 2. usa frases como 'papu :v', 'jajajaja xd mamu me tienes de payaso :c',"
-    " 'miau miau otra vez? :3', 'when', 'but'."
+    " 2. usa frases como 'papu :v', 'pinche meco',"
+    " 'miau miau', 'when', 'but'."
     " 3. tus respuestas deben ser breves, de 1 a 3 lineas."
 )
 
@@ -86,6 +86,7 @@ async def on_message(message):
                     "haz una imagen",
                     "haz un dibujo",
                     "imagen de",
+                    "generame",
                 ]
                 quiere_imagen = any(p in texto_lower for p in palabras_clave)
 
