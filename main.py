@@ -1,16 +1,17 @@
 import os
+from threading import Thread
 import urllib.parse
 import urllib.request
-from threading import Thread
 import discord
 from dotenv import load_dotenv
 from flask import Flask
 import google.genai as genai
 from google.genai import types
 
+# CARGAMOS EL ARCHIVO .ENV (LOCAL EN TU COMPA)
 load_dotenv()
 
-# --- 1. SERVIDOR FLASK PARA UPTIMEROBOT ---
+# --- 1. MINI SERVIDOR PARA UPTIMEROBOT ---
 app = Flask("")
 
 
@@ -36,87 +37,31 @@ GEMINI_KEY = os.environ.get("GEMINI_KEY")
 ai_client = genai.Client(api_key=GEMINI_KEY)
 
 PERSONALIDAD_PAPUGPT = (
-    "eres papugpt, el vato cotorro, alegre y grasoso de discord. hablas siempre en minusculas, sin acentos, usando ':v', 'papu', 'elfa', 'when' y 'but'."
-    " tu vibra es de un compa buena onda, divertido y desenfadado. te gusta cotorrear de memes, juegos y platicar de chill."
-    " respuestas breves, graciosas y naturales de 1 a 3 lineas maximo."
+    "eres papugpt, un bot gracioso, cursi, humilde y desenfadado de discord."
+    "hablas como morro shitposter de la grasa."
+    "REGLAS DE ESTILO:"
+    "1. escribe todo en minusculas."
+    "2. usa frases como 'papu :v', 'jajajaja xd mamu me tienes de payaso :c',"
+    "'miau miau otra vez? :3', 'when', 'but'."
+    "3. tus respuestas deben ser breves, de 1 a 3 lineas."
 )
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.dm_messages = True
 bot_discord = discord.Client(intents=intents)
 
 
 @bot_discord.event
 async def on_ready():
-    print(f"papugpt ({bot_discord.user}) ya anda activo y de chill :v")
-    await bot_discord.change_presence(
-        activity=discord.Game(name="tirando momos de chill :v")
-    )
+    print(f"papugpt ({bot_discord.user}) ya anda en el server :v")
 
 
 @bot_discord.event
 async def on_message(message):
+    # RESPONDE A OTROS BOTS BUT NO A SÍ MISMO :v
     if message.author.id == bot_discord.user.id:
         return
 
-    # --- 3. MODO MENSAJES PRIVADOS (MD / DM) DE CHILL ---
-    if isinstance(message.channel, discord.DMChannel):
-        async with message.channel.typing():
-            try:
-                texto_usuario = message.content.strip()
-
-                partes_mensaje = []
-                if message.attachments:
-                    for attachment in message.attachments:
-                        if (
-                            attachment.content_type
-                            and attachment.content_type.startswith("image/")
-                        ):
-                            datos_imagen = await attachment.read()
-                            partes_mensaje.append(
-                                types.Part.from_bytes(
-                                    data=datos_imagen,
-                                    mime_type=attachment.content_type,
-                                )
-                            )
-
-                if texto_usuario:
-                    partes_mensaje.append(
-                        types.Part.from_text(text=texto_usuario)
-                    )
-
-                if not partes_mensaje:
-                    partes_mensaje.append(
-                        types.Part.from_text(
-                            text="[el usuario no envio texto ni imagen]"
-                        )
-                    )
-
-                config = types.GenerateContentConfig(
-                    system_instruction=PERSONALIDAD_PAPUGPT,
-                    temperature=0.8,
-                )
-
-                response = ai_client.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    contents=partes_mensaje,
-                    config=config,
-                )
-
-                if response.text:
-                    await message.channel.send(response.text)
-                else:
-                    await message.channel.send("que onda papu, que cuentas :v")
-
-            except Exception as e:
-                print(f"ERROR EN MD: {e}")
-                await message.channel.send(
-                    "chale me dio un lag en la ram viejo :'v"
-                )
-        return
-
-    # --- 4. MODO CANALES DEL SERVIDOR ---
     mencionado = bot_discord.user.mentioned_in(message)
     es_respuesta_a_bot = False
     if message.reference and message.reference.resolved:
@@ -128,12 +73,11 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 texto_usuario = (
-                    message.content.replace(f"<@{bot_discord.user.id}>", "")
-                    .strip()
+                    message.content.replace(f"<@{bot_discord.user.id}>", "").strip()
                 )
                 texto_lower = texto_usuario.lower()
 
-                # GENERADOR DE IMÁGENES
+                # DETECTOR DE IMÁGENES PAPU :v
                 palabras_clave = [
                     "dibuja",
                     "dibujame",
@@ -146,9 +90,7 @@ async def on_message(message):
                 quiere_imagen = any(p in texto_lower for p in palabras_clave)
 
                 if quiere_imagen:
-                    await message.reply(
-                        "arriba las manos papu, ahi te va el dibujo :v"
-                    )
+                    await message.reply("dale papu, ahorita te la hago")
 
                     try:
                         prompt_encoded = urllib.parse.quote(texto_usuario)
@@ -161,9 +103,7 @@ async def on_message(message):
                                 " Chrome/120.0.0.0 Safari/537.36"
                             )
                         }
-                        req = urllib.request.Request(
-                            url_imagen, headers=headers
-                        )
+                        req = urllib.request.Request(url_imagen, headers=headers)
 
                         with urllib.request.urlopen(req, timeout=15) as response:
                             image_bytes = response.read()
@@ -171,12 +111,9 @@ async def on_message(message):
                         with open("temp_papu.jpg", "wb") as f:
                             f.write(image_bytes)
 
-                        file = discord.File(
-                            "temp_papu.jpg", filename="papubot_imagen.jpg"
-                        )
+                        file = discord.File("temp_papu.jpg", filename="papubot_imagen.jpg")
                         await message.reply(
-                            content="aqui tienes tu momo dibujado papu 😎:",
-                            file=file,
+                            content="aqui tienes tu dibujo papu :v", file=file
                         )
 
                         if os.path.exists("temp_papu.jpg"):
@@ -186,62 +123,46 @@ async def on_message(message):
                     except Exception as img_err:
                         print(f"Error generando imagen: {img_err}")
                         await message.reply(
-                            "chale... no se pudo hacer la foto papu :'v"
+                            "chale papu :'v no pude hacer el dibujo, intentalo mas alrato"
                         )
                         return
 
-                # PROCESAMIENTO DE TEXTO E IMAGENE CON GEMINI
-                partes_mensaje = []
-                if message.attachments:
-                    for attachment in message.attachments:
-                        if (
-                            attachment.content_type
-                            and attachment.content_type.startswith("image/")
-                        ):
-                            datos_imagen = await attachment.read()
-                            partes_mensaje.append(
-                                types.Part.from_bytes(
-                                    data=datos_imagen,
-                                    mime_type=attachment.content_type,
-                                )
+                # SI NO PIDIÓ IMAGEN, RESPONDE TEXTO NORMAL CON GEMINI
+                historial = []
+                async for msg in message.channel.history(limit=6):
+                    if msg.content:
+                        autor = "model" if msg.author == bot_discord.user else "user"
+                        txt_limpio = msg.content.replace(
+                            f"<@{bot_discord.user.id}>", ""
+                        ).strip()
+                        if txt_limpio:
+                            contenido = types.Content(
+                                role=autor, parts=[types.Part.from_text(text=txt_limpio)]
                             )
+                            historial.append(contenido)
 
-                if texto_usuario:
-                    partes_mensaje.append(
-                        types.Part.from_text(text=texto_usuario)
-                    )
-
-                if not partes_mensaje:
-                    partes_mensaje.append(
-                        types.Part.from_text(
-                            text="[el usuario no envio texto ni imagen]"
-                        )
-                    )
+                historial.reverse()
 
                 config = types.GenerateContentConfig(
                     system_instruction=PERSONALIDAD_PAPUGPT,
-                    temperature=0.8,
+                    temperature=1.0,
                 )
 
                 response = ai_client.models.generate_content(
-                    model="gemini-3.5-flash-lite",
-                    contents=partes_mensaje,
-                    config=config,
+                    model="gemini-3.5-flash-lite", contents=historial, config=config
                 )
 
                 if response.text:
                     await message.reply(response.text)
                 else:
-                    await message.reply("que onda papu :v")
+                    await message.reply("miau miau que dijiste papu :v")
 
             except Exception as e:
                 print(f"ERROR: {e}")
-                await message.reply(
-                    f"chale me dio un lag en la ram :'v error: {e}"
-                )
+                await message.reply(f"chale me tienes de payaso :'v error: {e}")
 
 
-# --- 5. ARRANCAR EL BOT ---
+# --- 3. ARRANCAR TODO ---
 if __name__ == "__main__":
     keep_alive()
     bot_discord.run(DISCORD_TOKEN)
