@@ -37,13 +37,14 @@ GEMINI_KEY = os.environ.get("GEMINI_KEY")
 ai_client = genai.Client(api_key=GEMINI_KEY)
 
 PERSONALIDAD_PAPUGPT = (
-    "eres papugpt, un bot gracioso, humilde y desenfadado de discord y un poco serio."
-    " hablas como morro shitposter de la grasa."
-    " REGLAS DE ESTILO:"
-    " 1. escribe todo en minusculas."
-    " 2. usa frases como 'papu :v', 'pinche meco',"
-    " 'miau miau', 'when', 'but'."
-    " 3. tus respuestas deben ser breves, de 1 a 3 lineas."
+    "eres papugpt. entrenaste 3 años en las montañas de daguestan y sigues siendo el vato mas cotorro y grasoso de discord."
+    " eres alegre, mamon y carismatico de pana, PERO NUNCA TE DEJAS DE NADIE."
+    " REGLAS DE ACTITUD Y ESTILO:"
+    " 1. escribe todo en minusculas y sin acentos."
+    " 2. SI TE INSULTAN O BUSCAN PELEA: saca unos insultos finos, creativos, absurdos y humillantes pero con humor grasoso. nada de insultos basicos o aburridos, hazlos sentir que no tienen ni 1 de iq o que parecen bot de roblox sin textura (ej: 'tienes el iq de una piedra de rio papu :v', 'mucha boca para alguien con cara de aldeano de minecraft', 'when crees que insultas: but pareces NPC desconfigurado')."
+    " 3. si te hablan bien, responde con cotorreo, chistes grasosos y buena onda (ej: 'que onda papu :v', 'when todo sale bien: but la vida te cobra')."
+    " 4. si te mandan una foto, tírale cura con sarcasmo pesado pero gracioso."
+    " 5. respuestas breves de 1 a 2 lineas maximo."
 )
 
 intents = discord.Intents.default()
@@ -77,7 +78,7 @@ async def on_message(message):
                 )
                 texto_lower = texto_usuario.lower()
 
-                # DETECTOR DE IMÁGENES PAPU :v
+                # DETECTOR DE GENERACIÓN DE IMÁGENES (POLLINATIONS)
                 palabras_clave = [
                     "dibuja",
                     "dibujame",
@@ -86,12 +87,11 @@ async def on_message(message):
                     "haz una imagen",
                     "haz un dibujo",
                     "imagen de",
-                    "generame",
                 ]
                 quiere_imagen = any(p in texto_lower for p in palabras_clave)
 
                 if quiere_imagen:
-                    await message.reply("dale papu, ahorita te la hago")
+                    await message.reply("sale papu, ahorita te la hago sin llorar :v")
 
                     try:
                         prompt_encoded = urllib.parse.quote(texto_usuario)
@@ -114,7 +114,7 @@ async def on_message(message):
 
                         file = discord.File("temp_papu.jpg", filename="papubot_imagen.jpg")
                         await message.reply(
-                            content="aqui tienes tu dibujo papu :v", file=file
+                            content="aqui esta tu dibujo papu, 10/10 :v", file=file
                         )
 
                         if os.path.exists("temp_papu.jpg"):
@@ -124,39 +124,44 @@ async def on_message(message):
                     except Exception as img_err:
                         print(f"Error generando imagen: {img_err}")
                         await message.reply(
-                            "chale papu :'v no pude hacer el dibujo, intentalo mas alrato"
+                            "chale papu :'v no salio la foto, reintenta despues"
                         )
                         return
 
-                # SI NO PIDIÓ IMAGEN, RESPONDE TEXTO NORMAL CON GEMINI
-                historial = []
-                async for msg in message.channel.history(limit=6):
-                    if msg.content:
-                        autor = "model" if msg.author == bot_discord.user else "user"
-                        txt_limpio = msg.content.replace(
-                            f"<@{bot_discord.user.id}>", ""
-                        ).strip()
-                        if txt_limpio:
-                            contenido = types.Content(
-                                role=autor, parts=[types.Part.from_text(text=txt_limpio)]
+                # REVISAMOS SI EL USUARIO MANDÓ UNA FOTO ADJUNTA PARA ANALIZARLA
+                partes_mensaje = []
+                if message.attachments:
+                    for attachment in message.attachments:
+                        if attachment.content_type and attachment.content_type.startswith("image/"):
+                            datos_imagen = await attachment.read()
+                            partes_mensaje.append(
+                                types.Part.from_bytes(
+                                    data=datos_imagen,
+                                    mime_type=attachment.content_type
+                                )
                             )
-                            historial.append(contenido)
 
-                historial.reverse()
+                # SI MANDÓ TEXTO, TAMBIÉN LO AGREGAMOS
+                if texto_usuario:
+                    partes_mensaje.append(types.Part.from_text(text=texto_usuario))
 
+                if not partes_mensaje:
+                    partes_mensaje.append(types.Part.from_text(text="[el usuario no envio texto ni imagen]"))
+
+                # PROCESAMOS CON GEMINI 3.5 FLASH LITE
                 config = types.GenerateContentConfig(
                     system_instruction=PERSONALIDAD_PAPUGPT,
                     temperature=1.0,
                 )
 
                 response = ai_client.models.generate_content(
-                    model="gemini-3.5-flash-lite", contents=historial, config=config
+                    model="gemini-3.5-flash-lite", contents=partes_mensaje, config=config
                 )
 
                 if response.text:
                     await message.reply(response.text)
                 else:
-                    await message.reply("miau miau que dijiste papu :v")
+                    await message.reply("mucha plática y poco entrenamiento papu :v")
 
             except Exception as e:
                 print(f"ERROR: {e}")
