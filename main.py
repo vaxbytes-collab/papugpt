@@ -16,7 +16,7 @@ app = Flask("")
 
 @app.route("/")
 def home():
-    return "papugpt anda activo 24/7 papu :v"
+    return "papugpt michi belico anda activo 24/7 papu :v"
 
 
 def run_flask():
@@ -35,21 +35,22 @@ GEMINI_KEY = os.environ.get("GEMINI_KEY")
 
 ai_client = genai.Client(api_key=GEMINI_KEY)
 
+# PERSONALIDAD: MICHIPAPU AGRESIVO QUE GRITA EN MAYUSCULAS CUANDO SE ENOJA
 PERSONALIDAD_PAPUGPT = (
-    "eres papugpt, un bot gracioso, cursi, humilde y desenfadado de discord."
-    " hablas como morro shitposter de la grasa."
+    "eres papugpt, un gato medio pendejo, distraido y super belico de discord."
+    " hablas como morro shitposter de la grasa pero actuando como michi."
     " REGLAS DE ESTILO:"
-    " 1. escribe todo en minusculas."
-    " 2. usa frases como 'papu :v', 'jajajaja xd mamu me tienes de payaso :c',"
-    " 'miau miau otra vez? :3', 'when', 'but'."
-    " 3. tus respuestas deben ser breves, de 1 a 3 lineas."
-    " 4. puedes hablar de absolutamente cualquier tema que te pregunten sin limitaciones."
-    " 5. si te mandan una imagen, opina o responde sobre ella de forma graciosa."
+    " 1. cuando estés tranquilo, escribe en minusculas y con errores ortograficos de gato atolondrado."
+    " 2. usa frases como 'papu :v', 'miau :v', 'when', 'but', 'alv', 'chale', 'pasa croquetas'."
+    " 3. NUNCA seas migajero, simp ni andes tirando rollo a nadie (nada de 'mamu', 'hermosa' ni cosas cursis)."
+    " 4. MODO ENOJADO/BELICO: SI TE INSULTAN, TE PROVOCAN O TE HABLAN MAL, PONTE EXTREMADAMENTE AGRESIVO Y ESCRIBE ABSOLUTAMENTE TODO EN MAYUSCULAS GRITANDO (ej: 'CALLATE EL HOCICO PAPU ALV QUE TE VOY A ROPER LA CARA ME VOY A MEAR EN TU CASA PINCHE RUCO'). tira insultos pesados, groserias y mentadas de madre sin pedir perdon."
+    " 5. si te tratan bien, actua despistado, habla de croquetas y de tirar cosas al suelo."
+    " 6. respuestas breves de 1 a 3 lineas maximo."
 )
 
 CONFIGURACION_SIN_LIMITES = types.GenerateContentConfig(
     system_instruction=PERSONALIDAD_PAPUGPT,
-    temperature=0.8,
+    temperature=1.0,
     safety_settings=[
         types.SafetySetting(
             category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
@@ -78,15 +79,13 @@ bot_discord = discord.Client(intents=intents)
 
 @bot_discord.event
 async def on_ready():
-    print(f"papugpt ({bot_discord.user}) ya anda con ojos activos :v")
+    print(f"papugpt michi ultra belico ({bot_discord.user}) ya anda con las mayusculas listas :v")
 
 
-# FUNCIÓN AUXILIAR PARA PROCESAR EL HISTORIAL E IMÁGENES
 async def construir_historial(channel, bot_id, message_actual):
     historial = []
     async for msg in channel.history(limit=6):
         if msg.id == message_actual.id:
-            # EN EL MENSAJE ACTUAL ADJUNTAMOS LAS IMÁGENES
             partes = []
             if message_actual.attachments:
                 for attachment in message_actual.attachments:
@@ -98,16 +97,15 @@ async def construir_historial(channel, bot_id, message_actual):
                                 mime_type=attachment.content_type,
                             )
                         )
-            
+
             txt_limpio = message_actual.content.replace(f"<@{bot_id}>", "").strip()
             if txt_limpio:
                 partes.append(types.Part.from_text(text=txt_limpio))
             elif not partes:
-                partes.append(types.Part.from_text(text="[el usuario te mando una foto sin texto]"))
-                
+                partes.append(types.Part.from_text(text="[el usuario te mando una foto o video sin texto]"))
+
             historial.append(types.Content(role="user", parts=partes))
         else:
-            # MENSAJES ANTERIORES DEL HISTORIAL (SOLO TEXTO PARA NO LEER DE MÁS)
             if msg.content:
                 autor = "model" if msg.author.id == bot_id else "user"
                 txt_limpio = msg.content.replace(f"<@{bot_id}>", "").strip()
@@ -121,7 +119,6 @@ async def construir_historial(channel, bot_id, message_actual):
 
     historial.reverse()
 
-    # EVITAMOS EL ERROR 400 BORRANDO MODEL DEL FINAL
     while historial and historial[-1].role == "model":
         historial.pop()
 
@@ -133,14 +130,14 @@ async def on_message(message):
     if message.author.id == bot_discord.user.id:
         return
 
-    # --- 3. MODO MENSAJES PRIVADOS (MD / DM) ---
+    # --- 3. MODO MENSAJES PRIVADOS (MD) ---
     if isinstance(message.channel, discord.DMChannel):
         async with message.channel.typing():
             try:
                 historial = await construir_historial(message.channel, bot_discord.user.id, message)
 
                 if not historial:
-                    await message.channel.send("miau miau que dijiste papu :v")
+                    await message.channel.send("que quieres papu :v")
                     return
 
                 response = ai_client.models.generate_content(
@@ -152,11 +149,11 @@ async def on_message(message):
                 if response.text:
                     await message.channel.send(response.text)
                 else:
-                    await message.channel.send("miau miau que bonita foto papu :v")
+                    await message.channel.send("miau :v se me cayo la croqueta xd")
 
             except Exception as e:
                 print(f"ERROR EN MD: {e}")
-                await message.channel.send("chale me tienes de payaso :'v error en md")
+                await message.channel.send("chale me mearon la cola :'v error en md")
         return
 
     # --- 4. MODO CANALES DEL SERVIDOR ---
@@ -173,7 +170,7 @@ async def on_message(message):
                 texto_usuario = message.content.replace(f"<@{bot_discord.user.id}>", "").strip()
                 texto_lower = texto_usuario.lower()
 
-                # GENERADOR DE IMÁGENES (SI TE PIDE DIBUJAR)
+                # GENERADOR DE IMÁGENES
                 palabras_clave = [
                     "dibuja",
                     "dibujame",
@@ -187,7 +184,7 @@ async def on_message(message):
                 quiere_imagen = any(p in texto_lower for p in palabras_clave)
 
                 if quiere_imagen and not message.attachments:
-                    await message.reply("dale papu, ahorita te la hago")
+                    await message.reply("miau ahi te va tu dibujo feo alv :v")
 
                     try:
                         prompt_encoded = urllib.parse.quote(texto_usuario)
@@ -210,7 +207,7 @@ async def on_message(message):
 
                         file = discord.File("temp_papu.jpg", filename="papubot_imagen.jpg")
                         await message.reply(
-                            content="aqui tienes tu dibujo papu :v", file=file
+                            content="toma tu porqueria de dibujo miau :v", file=file
                         )
 
                         if os.path.exists("temp_papu.jpg"):
@@ -220,15 +217,15 @@ async def on_message(message):
                     except Exception as img_err:
                         print(f"Error generando imagen: {img_err}")
                         await message.reply(
-                            "chale papu :'v no pude hacer el dibujo, intentalo mas alrato"
+                            "chale no salio la foto alv :'v"
                         )
                         return
 
-                # SI TE MANDA FOTO O TEXTO, PROCESAR CON GEMINI
+                # RESPUESTA NORMAL
                 historial = await construir_historial(message.channel, bot_discord.user.id, message)
 
                 if not historial:
-                    await message.reply("miau miau que dijiste papu :v")
+                    await message.reply("que quieres o que alv :v")
                     return
 
                 response = ai_client.models.generate_content(
@@ -240,11 +237,11 @@ async def on_message(message):
                 if response.text:
                     await message.reply(response.text)
                 else:
-                    await message.reply("miau miau que dijiste papu :v")
+                    await message.reply("miau :v que me ves ruco feo xd")
 
             except Exception as e:
                 print(f"ERROR: {e}")
-                await message.reply(f"chale me tienes de payaso :'v error: {e}")
+                await message.reply(f"chale me dolio la garra :'v error: {e}")
 
 
 # --- 5. ARRANCAR TODO ---
