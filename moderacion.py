@@ -61,7 +61,8 @@ def _ids(nombre):
     return {int(x) for x in os.environ.get(nombre, "").split(",") if x.strip().isdigit()}
 
 
-MODO = os.environ.get("activo").strip().lower()
+# Correccion del bug de Render con un valor por defecto seguro ("prueba")
+MODO = os.environ.get("activo", "prueba").strip().lower()
 CANAL_LOGS_ID = _id("1560939111861452810")
 CANAL_REPORTES_ID = _id("1560939148905545749")
 CANAL_STAFF_ID = _id("1560940991102324746")
@@ -250,9 +251,6 @@ class Moderacion:
         self.modelo = modelo
         self.activo = MODO == "activo"
 
-        # BLOCK_NONE aqui es a proposito: este modelo NO genera contenido, solo devuelve
-        # una etiqueta. Si los filtros estuvieran prendidos, Gemini se negaria a analizar
-        # justo los mensajes ke queremos detectar.
         categorias = [
             types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
             types.HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -277,8 +275,8 @@ class Moderacion:
             "analizados": 0, "reportes": 0, "sanciones": 0,
             "errores": 0, "descartados": 0, "sin_cupo": 0,
         }
-        self._ventana = deque()          # marcas de tiempo pa el limite por minuto
-        self._vistos = deque()           # pa no analizar dos veces lo mismo
+        self._ventana = deque()
+        self._vistos = deque()
         self._vistos_set = set()
         self._tareas = []
         self._lock = threading.Lock()
@@ -287,7 +285,6 @@ class Moderacion:
         self.sem = None
         self.grupo = None
 
-    # ---------- arranque ----------
     async def iniciar(self):
         self._db = sqlite3.connect(DB_PATH, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
@@ -341,7 +338,6 @@ class Moderacion:
                 log.exception("fallo la limpieza de la base")
             await asyncio.sleep(24 * 3600)
 
-    # ---------- entrada de mensajes ----------
     def _es_staff(self, miembro):
         perms = getattr(miembro, "guild_permissions", None)
         if perms and (perms.administrator or perms.manage_messages or perms.moderate_members):
@@ -362,7 +358,6 @@ class Moderacion:
         return False
 
     def encolar(self, message):
-        """Se llama desde on_message. No bloquea: solo mete el mensaje a la cola."""
         if self.cola is None or self._exento(message):
             return
         texto = (message.content or "").strip()
@@ -400,7 +395,6 @@ class Moderacion:
         self._ventana.append(ahora)
         return True
 
-    # ---------- analisis ----------
     async def clasificar(self, texto, canal):
         contenido = (
             f"canal: #{canal}\n\n"
@@ -417,7 +411,7 @@ class Moderacion:
                 log.warning("limite de Gemini (429): se omite este mensaje")
             else:
                 log.exception("error clasificando")
-            return None  # si falla, NO se sanciona
+            return None
 
         pf = getattr(resp, "prompt_feedback", None)
         razon_bloqueo = getattr(pf, "block_reason", None) if pf else None
@@ -467,7 +461,6 @@ class Moderacion:
         fila = await self._sql(SQL_CONTAR_STRIKES, (guild_id, user_id, desde), uno=True)
         return fila["n"] if fila else 0
 
-    # ---------- acciones ----------
     async def _borrar(self, message):
         try:
             await message.delete()
@@ -475,7 +468,7 @@ class Moderacion:
         except discord.NotFound:
             return False
         except discord.HTTPException:
-            log.warning("no pude borrar el mensaje (le falta 'gestionar mensajes'?)")
+            log.warning("no pude borrar el mensaje")
             return False
 
     async def _silenciar(self, miembro, minutos, razon):
@@ -483,7 +476,7 @@ class Moderacion:
             await miembro.timeout(dt.timedelta(minutes=minutos), reason=razon[:400])
             return True
         except discord.HTTPException:
-            log.warning("no pude silenciar a %s (rol del bot mas abajo o falta 'moderar miembros')", miembro)
+            log.warning("no pude silenciar a %s", miembro)
             return False
 
     async def _avisar_dm(self, usuario, accion, v, nombre_server):
@@ -533,7 +526,6 @@ class Moderacion:
         else:
             self.stats["reportes"] += 1
 
-        # que paso exactamente
         quiso = []
         if accion.borrar:
             quiso.append("borrar el mensaje")
@@ -553,7 +545,6 @@ class Moderacion:
             )
         await self._publicar(message, v, accion, es_staff, infraccion_id, estado)
 
-    # ---------- avisos al staff ----------
     def _embed(self, message, v, accion, es_staff, infraccion_id, estado):
         titulos = {
             "reportar": ("🔎 revisar", discord.Color.gold()),
@@ -591,7 +582,6 @@ class Moderacion:
             return
         canal = self.bot.get_channel(canal_id)
         if canal is None:
-            log.warning("no encuentro el canal %s (revisa el id y que el bot lo vea)", canal_id)
             return
         if ping and ROL_MOD_ID:
             menciones = discord.AllowedMentions(roles=[discord.Object(id=ROL_MOD_ID)])
@@ -600,7 +590,7 @@ class Moderacion:
         try:
             await canal.send(content=contenido, embed=embed, allowed_mentions=menciones)
         except discord.HTTPException:
-            log.exception("no pude mandar el aviso al canal %s", canal_id)
+            log.exception("no pude mandar el aviso")
 
     async def _publicar(self, message, v, accion, es_staff, infraccion_id, estado):
         embed = self._embed(message, v, accion, es_staff, infraccion_id, estado)
@@ -612,8 +602,6 @@ class Moderacion:
 
         if es_staff:
             await self._enviar(CANAL_STAFF_ID, embed, contenido)
-            if not CANAL_STAFF_ID:
-                log.warning("reporte contra staff sin MOD_CANAL_STAFF_ID: %s", v)
             return
         if accion.tipo == "reportar":
             await self._enviar(CANAL_REPORTES_ID, embed, contenido, ping=accion.ping)
@@ -622,7 +610,6 @@ class Moderacion:
         if accion.ping:
             await self._enviar(CANAL_REPORTES_ID, embed, contenido, ping=True)
 
-    # ---------- comandos /mod ----------
     def _es_mod(self, interaction):
         perms = getattr(interaction.user, "guild_permissions", None)
         return bool(perms and (perms.administrator or perms.moderate_members or perms.manage_messages))
@@ -665,7 +652,7 @@ class Moderacion:
             )
 
         @self.grupo.command(name="deshacer", description="revierte una sancion ke fue un error")
-        @app_commands.describe(infraccion="el id de infraccion ke sale en el log (el numero del footer)")
+        @app_commands.describe(infraccion="el id de infraccion ke sale en el log")
         async def deshacer(interaction: discord.Interaction, infraccion: int):
             if not self._es_mod(interaction):
                 await interaction.response.send_message("esto es solo pa mods.", ephemeral=True)
@@ -716,8 +703,7 @@ class Moderacion:
             aviso.add_field(name="silencio quitado", value="si" if quitado else "no", inline=True)
             await self._enviar(CANAL_LOGS_ID, aviso)
             await interaction.response.send_message(
-                f"listo, infraccion #{infraccion} deshecha. el mensaje borrado no se puede "
-                "restaurar, pero ya no cuenta como strike.",
+                f"listo, infraccion #{infraccion} deshecha.",
                 ephemeral=True,
             )
 
@@ -728,12 +714,66 @@ class Moderacion:
                 return
             s = self.stats
             texto = (
-                f"modo: **{'ACTIVO' if self.activo else 'PRUEBA (no se aplica nada)'}**\n"
+                f"modo: **{'ACTIVO' if self.activo else 'PRUEBA'}**\n"
                 f"analizados: {s['analizados']} | reportes: {s['reportes']} | sanciones: {s['sanciones']}\n"
-                f"errores: {s['errores']} | descartados (cola llena): {s['descartados']} | "
-                f"sin cupo por minuto: {s['sin_cupo']}\n"
-                f"en cola ahorita: {self.cola.qsize() if self.cola else 0}"
+                f"errores: {s['errores']} | en cola: {self.cola.qsize() if self.cola else 0}"
             )
             await interaction.response.send_message(texto, ephemeral=True)
+
+        # COMANDOS DE MODERACION AGREGADOS (warn, kick, ban, mute)
+        @self.grupo.command(name="warn", description="le da un aviso oficial a un usuario")
+        @app_commands.describe(usuario="a quien le cae el warn", razon="porque se porto mal")
+        async def warn(interaction: discord.Interaction, usuario: discord.Member, razon: str):
+            if not self._es_mod(interaction):
+                await interaction.response.send_message("esto es solo pa mods papu :v", ephemeral=True)
+                return
+            infraccion_id = await self._sql(
+                "INSERT INTO infracciones (guild_id, user_id, canal_id, categoria, gravedad, confianza, razon, accion, aplicada, creado_ts) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (interaction.guild_id, usuario.id, interaction.channel_id, "otro", 1, 1.0, razon, "aviso", 1, int(time.time())),
+                commit=True,
+            )
+            await interaction.response.send_message(f"le caio un warn alv a {usuario.mention} por: *{razon}* (id: `#{infraccion_id}`) :v")
+            try:
+                await usuario.send(f"te llego un warn en **{interaction.guild.name}** por: {razon}. portate bien papu :'v")
+            except:
+                pass
+
+        @self.grupo.command(name="kick", description="patea alv al usuario del server")
+        @app_commands.describe(usuario="a quien vas a echar", razon="la causa del berrinche")
+        async def kick(interaction: discord.Interaction, usuario: discord.Member, razon: str = "sin razon especifica"):
+            if not self._es_mod(interaction):
+                await interaction.response.send_message("no eres mod papu, aguas :v", ephemeral=True)
+                return
+            try:
+                await usuario.kick(reason=razon)
+                await interaction.response.send_message(f"se fue expulsado {usuario.mention} alv. razon: {razon} :v")
+            except discord.HTTPException:
+                await interaction.response.send_message("no pude patearlo, seguro tiene mas rango o me falta permiso :'v", ephemeral=True)
+
+        @self.grupo.command(name="ban", description="manda a la sombra permanente a alguien")
+        @app_commands.describe(usuario="el malora", razon="por que se va baneado")
+        async def ban(interaction: discord.Interaction, usuario: discord.Member, razon: str = "comportamiento toxico"):
+            if not self._es_mod(interaction):
+                await interaction.response.send_message("esta zona es prohibida pa ti papu :v", ephemeral=True)
+                return
+            try:
+                await usuario.ban(reason=razon, delete_message_days=1)
+                await interaction.response.send_message(f"¡banhammer aplicado! {usuario.mention} fue a mimir pa siempre. razon: {razon} 💀")
+            except discord.HTTPException:
+                await interaction.response.send_message("no se pudo banear, checa mis permisos papu :'v", ephemeral=True)
+
+        @self.grupo.command(name="mute", description="calla alv a alguien por un ratito")
+        @app_commands.describe(usuario="a quien vas a silenciar", minutos="cuantos minutos se va a calmar")
+        async def mute(interaction: discord.Interaction, usuario: discord.Member, minutos: int):
+            if not self._es_mod(interaction):
+                await interaction.response.send_message("nel, no tienes rango papu :v", ephemeral=True)
+                return
+            try:
+                delta = dt.timedelta(minutes=minutos)
+                await usuario.timeout(delta, reason=f"silenciado por {interaction.user}")
+                await interaction.response.send_message(f"shut up! {usuario.mention} fue muteado por {minutos} minutos miau :v")
+            except discord.HTTPException:
+                await interaction.response.send_message("fallo el mute, algo hice mal :'v", ephemeral=True)
 
         self.bot.tree.add_command(self.grupo)

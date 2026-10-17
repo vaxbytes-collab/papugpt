@@ -152,7 +152,7 @@ def _seguridad(umbral):
 CONFIG_CHAT = types.GenerateContentConfig(
     system_instruction=PERSONALIDAD_PAPUGPT,
     temperature=1.0,
-    max_output_tokens=1500,  # tope de gasto por respuesta, subelo si se corta
+    max_output_tokens=1500,
     safety_settings=_seguridad(types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE),
 )
 
@@ -176,13 +176,11 @@ ai_client = genai.Client(api_key=GEMINI_KEY)
 class PapuBot(discord.Client):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.tree = app_commands.CommandTree(self)  # comandos /mod
+        self.tree = app_commands.CommandTree(self)
         self.mod = None
 
     async def setup_hook(self):
-        # maximo 3 llamadas a Gemini al mismo tiempo
         self.sem = asyncio.Semaphore(3)
-        # moderacion con IA (ver moderacion.py)
         self.mod = Moderacion(self, ai_client, MODELO)
         await self.mod.iniciar()
 
@@ -190,7 +188,6 @@ class PapuBot(discord.Client):
 intents = discord.Intents.default()
 intents.message_content = True
 
-# el bot nunca puede mencionar a nadie (ni @everyone ni @here) aunque la IA lo escriba
 bot_discord = PapuBot(intents=intents, allowed_mentions=discord.AllowedMentions.none())
 
 
@@ -199,19 +196,38 @@ async def on_ready():
     log.info("papugpt michi ultra belico (%s) ya anda :v", bot_discord.user)
 
 
+# --- COMANDOS DE ENTRETENIMIENTO ---
+@bot_discord.tree.command(name="chiste", description="cuenta un chiste malisimo de la grasa")
+async def chiste(interaction: discord.Interaction):
+    import random
+    chistes = [
+        "when sales a la calle y te das cuenta que olvidaste los momos :v",
+        "what if un gato empieza a programar en python... nace papugpt alv xD",
+        "why las patatas para airfryer son tan god? porque quedan bien crujientes papu B)",
+        "when tu codigo no compila a la primera but te da igual porque eres bien pro :v"
+    ]
+    await interaction.response.send_message(random.choice(chistes))
+
+
+@bot_discord.tree.command(name="dado", description="tira un dado de 6 caras por si hay dudas")
+async def dado(interaction: discord.Interaction):
+    import random
+    resultado = random.randint(1, 6)
+    await interaction.response.send_message(f"el destino ha hablado... salio el numero: **{resultado}** :v")
+
+
 # --- 4. UTILIDADES ---
 _ultimo_uso = {}
 
 
 def en_cooldown(user_id, clave, segundos):
-    """True si el usuario todavia esta en cooldown. Si no, lo registra."""
     ahora = time.monotonic()
     llave = (user_id, clave)
     ultimo = _ultimo_uso.get(llave)
     if ultimo is not None and ahora - ultimo < segundos:
         return True
     _ultimo_uso[llave] = ahora
-    if len(_ultimo_uso) > 2000:  # limpieza para que no crezca sin fin
+    if len(_ultimo_uso) > 2000:
         for k, t in list(_ultimo_uso.items()):
             if ahora - t > 300:
                 _ultimo_uso.pop(k, None)
@@ -219,12 +235,10 @@ def en_cooldown(user_id, clave, segundos):
 
 
 def limpiar(texto, bot_id):
-    """Quita la mencion al bot del texto."""
     return re.sub(rf"<@!?{bot_id}>", "", texto or "").strip()
 
 
 def partir_texto(texto, limite=LIMITE_PARTE):
-    """Parte un texto largo en pedazos que quepan en un mensaje de Discord."""
     texto = (texto or "").strip()
     partes = []
     while len(texto) > limite:
@@ -252,7 +266,6 @@ async def responder(message, texto):
 
 
 async def reaccionar_espera(message):
-    """En vez de contestar cuando alguien spamea, solo le pone un reloj."""
     try:
         await message.add_reaction("⏳")
     except discord.HTTPException:
@@ -260,10 +273,6 @@ async def reaccionar_espera(message):
 
 
 async def construir_historial(message, bot_id):
-    """
-    Arma el historial para Gemini. Por privacidad solo manda los mensajes del usuario
-    que le habla al bot y los del propio bot, no los de otras personas del canal.
-    """
     previos = []
     async for msg in message.channel.history(limit=HISTORIAL_MENSAJES, before=message):
         if msg.author.id == bot_id:
@@ -277,7 +286,6 @@ async def construir_historial(message, bot_id):
             previos.append((rol, [types.Part.from_text(text=txt)]))
     previos.reverse()
 
-    # mensaje actual (texto + imagenes validas)
     partes = []
     imagenes = 0
     for adj in message.attachments:
@@ -298,7 +306,6 @@ async def construir_historial(message, bot_id):
         )
     previos.append(("user", partes))
 
-    # junta mensajes seguidos del mismo rol y asegura que arranque con 'user'
     fusion = []
     for rol, ps in previos:
         if fusion and fusion[-1][0] == rol:
@@ -322,7 +329,6 @@ async def generar_respuesta(historial):
 
 
 async def prompt_de_imagen_es_seguro(texto):
-    """Pregunta a Gemini si el pedido de imagen es seguro. Si falla, dice que no."""
     try:
         async with bot_discord.sem:
             resp = await ai_client.aio.models.generate_content(
@@ -397,11 +403,9 @@ async def manejar_imagen(message, texto_usuario):
 # --- 5. EVENTO PRINCIPAL ---
 @bot_discord.event
 async def on_message(message):
-    # ignora a TODOS los bots (incluido el mismo) para evitar loops
     if message.author.bot:
         return
 
-    # moderacion: solo mete el mensaje a una cola, no frena nada
     if message.guild is not None and bot_discord.mod:
         bot_discord.mod.encolar(message)
 
@@ -409,7 +413,6 @@ async def on_message(message):
 
     if not es_dm:
         bot_id = bot_discord.user.id
-        # ojo: no usar mentioned_in(), porque tambien cuenta @everyone y @here
         mencionado = any(u.id == bot_id for u in message.mentions)
 
         es_respuesta_a_bot = False
@@ -420,14 +423,12 @@ async def on_message(message):
         if not (mencionado or es_respuesta_a_bot):
             return
 
-        # pedir dibujo (solo en servidores, y sin adjuntos)
         texto_usuario = limpiar(message.content, bot_id)
         texto_lower = texto_usuario.lower()
         if not message.attachments and any(p in texto_lower for p in PALABRAS_IMAGEN):
             await manejar_imagen(message, texto_usuario)
             return
 
-    # chat normal (servidor o DM)
     if en_cooldown(message.author.id, "chat", CD_CHAT):
         await reaccionar_espera(message)
         return
@@ -439,7 +440,6 @@ async def on_message(message):
             historial = await construir_historial(message, bot_discord.user.id)
             respuesta = await generar_respuesta(historial)
         except Exception as e:
-            # el detalle va a la consola, nunca al chat
             log.exception("error en %s", "md" if es_dm else "canal")
             if getattr(e, "code", None) == 429:
                 error = "chale ando bien cansado papu, intenta en un ratito :'v"
@@ -454,7 +454,6 @@ async def on_message(message):
 
 @bot_discord.event
 async def on_message_edit(before, after):
-    # si editan un mensaje pa colar algo, tambien se revisa
     if (
         after.guild is not None
         and not after.author.bot
