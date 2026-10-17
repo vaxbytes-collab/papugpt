@@ -61,7 +61,7 @@ def _ids(nombre):
     return {int(x) for x in os.environ.get(nombre, "").split(",") if x.strip().isdigit()}
 
 
-MODO = os.environ.get("prueba").strip().lower()
+MODO = os.environ.get("activo").strip().lower()
 CANAL_LOGS_ID = _id("1560939111861452810")
 CANAL_REPORTES_ID = _id("1560939148905545749")
 CANAL_STAFF_ID = _id("1560940991102324746")
