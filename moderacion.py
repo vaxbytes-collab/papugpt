@@ -61,18 +61,18 @@ def _ids(nombre):
     return {int(x) for x in os.environ.get(nombre, "").split(",") if x.strip().isdigit()}
 
 
-MODO = os.environ.get("MOD_MODO", "prueba").strip().lower()
-CANAL_LOGS_ID = _id("MOD_CANAL_LOGS_ID")
-CANAL_REPORTES_ID = _id("MOD_CANAL_REPORTES_ID")
-CANAL_STAFF_ID = _id("MOD_CANAL_STAFF_ID")
-ROL_MOD_ID = _id("MOD_ROL_MOD_ID")
+MODO = os.environ.get("prueba").strip().lower()
+CANAL_LOGS_ID = _id("1560939111861452810")
+CANAL_REPORTES_ID = _id("1560939148905545749")
+CANAL_STAFF_ID = _id("1560940991102324746")
+ROL_MOD_ID = _id("1554365479294861393")
 CANALES_EXENTOS = _ids("MOD_CANALES_EXENTOS")
-GUILD_ID = _id("MOD_GUILD_ID")
+GUILD_ID = _id("1554161499285626970")
 DB_PATH = os.environ.get("MOD_DB_PATH", "moderacion.db")
 RETENCION_DIAS = _int("MOD_RETENCION_DIAS", 30)
 MAX_ANALISIS_POR_MIN = _int("MOD_MAX_POR_MINUTO", 30)
 
-MIN_CARACTERES = 4            # mensajes mas cortos no se analizan
+MIN_CARACTERES = 1            # mensajes mas cortos no se analizan
 MAX_CARACTERES = 1500         # se recorta antes de mandarlo a Gemini
 COLA_MAX = 200                # si se llena, se descartan mensajes (nunca se sanciona sin analizar)
 TRABAJADORES = 2              # analisis en paralelo
