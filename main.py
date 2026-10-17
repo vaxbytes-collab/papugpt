@@ -24,11 +24,15 @@ from threading import Thread
 import aiohttp
 import discord
 import google.genai as genai
+from discord import app_commands
 from dotenv import load_dotenv
 from flask import Flask
 from google.genai import types
 
 load_dotenv()
+
+# importar DESPUES de load_dotenv(): moderacion.py lee sus variables (MOD_*) al importarse
+from moderacion import Moderacion  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -170,9 +174,17 @@ ai_client = genai.Client(api_key=GEMINI_KEY)
 
 # --- 3. CLIENTE DE DISCORD ---
 class PapuBot(discord.Client):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.tree = app_commands.CommandTree(self)  # comandos /mod
+        self.mod = None
+
     async def setup_hook(self):
         # maximo 3 llamadas a Gemini al mismo tiempo
         self.sem = asyncio.Semaphore(3)
+        # moderacion con IA (ver moderacion.py)
+        self.mod = Moderacion(self, ai_client, MODELO)
+        await self.mod.iniciar()
 
 
 intents = discord.Intents.default()
@@ -389,6 +401,10 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # moderacion: solo mete el mensaje a una cola, no frena nada
+    if message.guild is not None and bot_discord.mod:
+        bot_discord.mod.encolar(message)
+
     es_dm = isinstance(message.channel, discord.DMChannel)
 
     if not es_dm:
@@ -434,6 +450,18 @@ async def on_message(message):
         await responder(message, error)
     else:
         await responder(message, respuesta or "miau :v de eso no hablo papu")
+
+
+@bot_discord.event
+async def on_message_edit(before, after):
+    # si editan un mensaje pa colar algo, tambien se revisa
+    if (
+        after.guild is not None
+        and not after.author.bot
+        and before.content != after.content
+        and bot_discord.mod
+    ):
+        bot_discord.mod.encolar(after)
 
 
 # --- 6. ARRANCAR TODO ---
