@@ -341,24 +341,65 @@ class Moderacion:
         self._tareas.append(asyncio.create_task(self._loop_limpieza()))
 
         self._registrar_comandos()
-        try:
-            if GUILD_ID:
-                guild = discord.Object(id=GUILD_ID)
-                self.bot.tree.copy_global_to(guild=guild)
-                await self.bot.tree.sync(guild=guild)
-                # kita los comandos GLOBALES viejos (ej. /ship) pa ke no salgan repetidos
-                self.bot.tree.clear_commands(guild=None)
-                await self.bot.tree.sync()
-            else:
-                await self.bot.tree.sync()
-        except Exception:
-            log.exception("no pude sincronizar los comandos")
+        await self._sincronizar_comandos()
 
         log.info(
             "moderacion lista | modo=%s | logs=%s | reportes=%s | staff=%s | rol_mod=%s",
             "ACTIVO" if self.activo else "PRUEBA (no se aplica nada)",
             CANAL_LOGS_ID, CANAL_REPORTES_ID, CANAL_STAFF_ID, ROL_MOD_ID,
         )
+
+    async def _sincronizar_comandos(self):
+        """
+        Deja en Discord SOLO los comandos actuales: los del server y NINGUNO global.
+        Los comandos repetidos salen cuando hay comandos globales viejos y ademas los del
+        server con los mismos nombres. Cada paso va separado pa ke uno ke falle no
+        se salte los demas, y al final se verifica en Discord ke quedo.
+        """
+        tree = self.bot.tree
+        if not GUILD_ID:
+            try:
+                await tree.sync()
+                log.info("comandos sincronizados de forma global")
+            except Exception:
+                log.exception("no pude sincronizar los comandos globales")
+            return
+
+        guild = discord.Object(id=GUILD_ID)
+
+        # 1) los comandos nuevos van al server (aparecen al instante)
+        try:
+            tree.copy_global_to(guild=guild)
+            await tree.sync(guild=guild)
+        except Exception:
+            log.exception(
+                "no pude sincronizar los comandos del server: revisa MOD_GUILD_ID y ke el bot "
+                "se haya invitado con el scope 'applications.commands'"
+            )
+            return
+
+        # 2) borra TODOS los comandos globales viejos (ej. los de versiones anteriores)
+        try:
+            tree.clear_commands(guild=None)
+            await tree.sync()
+        except Exception:
+            log.exception("no pude borrar los comandos globales viejos")
+
+        # 3) verifica en Discord ke de verdad quedo limpio
+        try:
+            en_server = sorted(c.name for c in await tree.fetch_commands(guild=guild))
+            globales = sorted(c.name for c in await tree.fetch_commands())
+            log.info("comandos en el server (%s): %s", len(en_server), ", ".join(en_server))
+            if globales:
+                log.warning(
+                    "OJO: siguen comandos GLOBALES (%s) y salen repetidos. Casi seguro hay otro "
+                    "PapuGPT viejo corriendo en otro lado (hosting u otra terminal): apagalo.",
+                    ", ".join(globales),
+                )
+            else:
+                log.info("sin comandos globales: no deberian salir repetidos")
+        except Exception:
+            log.exception("no pude verificar los comandos registrados en Discord")
 
     async def _sql(self, consulta, params=(), *, uno=False, todos=False, commit=False):
         def _run():
